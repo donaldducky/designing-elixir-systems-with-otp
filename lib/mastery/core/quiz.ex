@@ -6,7 +6,7 @@ defmodule Mastery.Core.Quiz do
             templates: %{},
             used: [],
             current_question: nil,
-            last_repsonse: nil,
+            last_response: nil,
             record: %{},
             mastered: []
 
@@ -53,7 +53,7 @@ defmodule Mastery.Core.Quiz do
 
   # should this be private?
   def save_response(quiz, response) do
-    Map.put(quiz, :last_repsonse, response)
+    Map.put(quiz, :last_response, response)
   end
 
   # should this be private?
