@@ -12,12 +12,13 @@ defmodule Mastery.Boundary.Proctor do
     {:ok, quizzes}
   end
 
-  def schedule_quiz(proctor \\ __MODULE__, quiz, temps, start_at, end_at) do
+  def schedule_quiz(proctor \\ __MODULE__, quiz, temps, start_at, end_at, notify_pid) do
     quiz = %{
       fields: quiz,
       templates: temps,
       start_at: start_at,
-      end_at: end_at
+      end_at: end_at,
+      notify_pid: notify_pid
     }
 
     GenServer.call(proctor, {:schedule_quiz, quiz})
@@ -67,14 +68,14 @@ defmodule Mastery.Boundary.Proctor do
 
   def start_quiz(quiz, now) do
     Logger.info("Starting quiz #{quiz.fields.title}...")
+    notify_start(quiz)
     QuizManager.build_quiz(quiz.fields)
     Enum.each(quiz.templates, &add_template(quiz, &1))
     timeout = DateTime.diff(quiz.end_at, now, :millisecond)
-    Process.send_after(self(), {:end_quiz, quiz.fields.title}, timeout)
+    Process.send_after(self(), {:end_quiz, quiz.fields.title, quiz.notify_pid}, timeout)
   end
 
   def add_template(quiz, template_fields) do
-    binding() |> IO.inspect(label: "")
     QuizManager.add_template(quiz.fields.title, template_fields)
   end
 
@@ -88,7 +89,7 @@ defmodule Mastery.Boundary.Proctor do
     build_reply_with_timeout({:noreply}, remaining_quizzes, now)
   end
 
-  def handle_info({:end_quiz, title}, quizzes) do
+  def handle_info({:end_quiz, title, notify_pid}, quizzes) do
     QuizManager.remove_quiz(title)
 
     title
@@ -96,6 +97,16 @@ defmodule Mastery.Boundary.Proctor do
     |> QuizSession.end_sessions()
 
     Logger.info("Stopped quiz #{title}.")
+    notify_stopped(notify_pid, title)
     handle_info(:timeout, quizzes)
   end
+
+  def notify_start(%{notify_pid: nil}), do: nil
+
+  def notify_start(quiz) do
+    send(quiz.notify_pid, {:started, quiz.fields.title})
+  end
+
+  def notify_stopped(nil, _title), do: nil
+  def notify_stopped(pid, title), do: send(pid, {:stopped, title})
 end
